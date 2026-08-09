@@ -17,6 +17,7 @@ public partial class Form1 : Form
         InitializeDefaults();
         Load += Form1_Load;
         FormClosed += Form1_FormClosed;
+        chkUseTargetPosition.CheckedChanged += chkUseTargetPosition_CheckedChanged;
     }
 
     private void InitializeDefaults()
@@ -26,6 +27,7 @@ public partial class Form1 : Form
         nudTargetX.Value = 0;
         nudTargetY.Value = 0;
         btnStop.Enabled = false;
+        UpdateTargetControlsState();
     }
 
     private async void btnStart_Click(object sender, EventArgs e)
@@ -95,6 +97,19 @@ public partial class Form1 : Form
     private void btnStop_Click(object sender, EventArgs e)
     {
         _clickLoopCts?.Cancel();
+    }
+
+    private void chkUseTargetPosition_CheckedChanged(object? sender, EventArgs e)
+    {
+        UpdateTargetControlsState();
+    }
+
+    private void UpdateTargetControlsState()
+    {
+        var enabled = chkUseTargetPosition.Checked;
+        nudTargetX.Enabled = enabled;
+        nudTargetY.Enabled = enabled;
+        btnUseCurrentPosition.Enabled = enabled;
     }
 
     private void ToggleAutoClicker()
