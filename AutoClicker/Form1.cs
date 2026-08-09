@@ -4,6 +4,8 @@ namespace AutoClicker;
 
 public partial class Form1 : Form
 {
+    private const int ToggleHotkeyId = 1;
+    private const int StopHotkeyId = 2;
     private CancellationTokenSource? _clickLoopCts;
     private int _clicksPerformed;
     private int? _repeatCount;
@@ -13,6 +15,8 @@ public partial class Form1 : Form
     {
         InitializeComponent();
         InitializeDefaults();
+        Load += Form1_Load;
+        FormClosed += Form1_FormClosed;
     }
 
     private void InitializeDefaults()
@@ -93,6 +97,49 @@ public partial class Form1 : Form
         _clickLoopCts?.Cancel();
     }
 
+    private void ToggleAutoClicker()
+    {
+        if (_isRunning)
+        {
+            btnStop_Click(this, EventArgs.Empty);
+            return;
+        }
+
+        btnStart_Click(this, EventArgs.Empty);
+    }
+
+    private void Form1_Load(object? sender, EventArgs e)
+    {
+        RegisterHotKey(Handle, ToggleHotkeyId, (uint)KeyModifiers.None, (uint)Keys.F1);
+        RegisterHotKey(Handle, StopHotkeyId, (uint)KeyModifiers.None, (uint)Keys.F2);
+        UpdateStatus("Ready (F1: start/stop, F2: stop)");
+    }
+
+    private void Form1_FormClosed(object? sender, FormClosedEventArgs e)
+    {
+        UnregisterHotKey(Handle, ToggleHotkeyId);
+        UnregisterHotKey(Handle, StopHotkeyId);
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        const int wmHotkey = 0x0312;
+
+        if (m.Msg == wmHotkey && (int)m.WParam == ToggleHotkeyId)
+        {
+            ToggleAutoClicker();
+            return;
+        }
+
+        if (m.Msg == wmHotkey && (int)m.WParam == StopHotkeyId)
+        {
+            btnStop_Click(this, EventArgs.Empty);
+            return;
+        }
+
+        base.WndProc(ref m);
+    }
+
     private void btnUseCurrentPosition_Click(object sender, EventArgs e)
     {
         var position = Cursor.Position;
@@ -146,6 +193,12 @@ public partial class Form1 : Form
     }
 
     [DllImport("user32.dll")]
+    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll")]
+    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    [DllImport("user32.dll")]
     private static extern bool SetCursorPos(int x, int y);
 
     [DllImport("user32.dll")]
@@ -153,4 +206,14 @@ public partial class Form1 : Form
 
     private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
     private const uint MOUSEEVENTF_LEFTUP = 0x0004;
+
+    [Flags]
+    private enum KeyModifiers : uint
+    {
+        None = 0,
+        Alt = 1,
+        Control = 2,
+        Shift = 4,
+        Windows = 8
+    }
 }
