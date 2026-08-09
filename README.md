@@ -1,0 +1,2 @@
+# AutoClicker
+Auto clicker software
