@@ -15,6 +15,7 @@ public partial class Form1 : Form
     private bool _isRunning;
     private bool _isWaitingForKey;
     private Keys _recordedKey = Keys.None;
+    private readonly List<Keys> _recordedModifiers = new();
 
     public Form1()
     {
@@ -108,9 +109,11 @@ public partial class Form1 : Form
     private void btnRecordKey_Click(object sender, EventArgs e)
     {
         _isWaitingForKey = true;
-        btnRecordKey.Text = "Press a key...";
+        _recordedKey = Keys.None;
+        _recordedModifiers.Clear();
+        btnRecordKey.Text = "Press a combo...";
         lblRecordedKey.Text = "Current: waiting...";
-        UpdateStatus("Press the key you want to record...");
+        UpdateStatus("Press a key combo (Ctrl/Shift/Alt + key)...");
     }
 
     private void chkUseTargetPosition_CheckedChanged(object? sender, EventArgs e)
@@ -191,11 +194,23 @@ public partial class Form1 : Form
             {
                 _instance.BeginInvoke(new Action(() =>
                 {
+                    if (IsModifierKey(key))
+                    {
+                        var modifier = ToModifierFlag(key);
+                        if (modifier != Keys.None && !_instance._recordedModifiers.Contains(modifier))
+                        {
+                            _instance._recordedModifiers.Add(modifier);
+                        }
+
+                        _instance.UpdateStatus($"Modifier detected: {FormatKeyName(key)}");
+                        return;
+                    }
+
                     _instance._recordedKey = key;
                     _instance._isWaitingForKey = false;
                     _instance.btnRecordKey.Text = "Record key";
-                    _instance.lblRecordedKey.Text = $"Current: {FormatKeyName(_instance._recordedKey)}";
-                    _instance.UpdateStatus($"Recorded: {FormatKeyName(_instance._recordedKey)}");
+                    _instance.lblRecordedKey.Text = $"Current: {FormatComboName(_instance._recordedModifiers, _instance._recordedKey)}";
+                    _instance.UpdateStatus($"Recorded: {FormatComboName(_instance._recordedModifiers, _instance._recordedKey)}");
                 }));
             }
         }
@@ -230,20 +245,59 @@ public partial class Form1 : Form
             SetCursorPos(target.X, target.Y);
         }
 
-        var selectedKey = ParseTriggeredKey();
-        if (selectedKey == Keys.None)
+        if (_recordedKey == Keys.None && _recordedModifiers.Count == 0)
         {
             mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
             mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
             return;
         }
 
-        SendKeyPress(selectedKey);
+        SendKeyCombination(_recordedModifiers, _recordedKey);
     }
 
-    private Keys ParseTriggeredKey()
+    private static string FormatComboName(IEnumerable<Keys> modifiers, Keys key)
     {
-        return _recordedKey;
+        var parts = new List<string>();
+
+        foreach (var modifier in modifiers)
+        {
+            switch (modifier)
+            {
+                case Keys.Control:
+                    parts.Add("Ctrl");
+                    break;
+                case Keys.Shift:
+                    parts.Add("Shift");
+                    break;
+                case Keys.Alt:
+                    parts.Add("Alt");
+                    break;
+            }
+        }
+
+        if (key == Keys.None)
+        {
+            return parts.Count > 0 ? string.Join(" + ", parts) : "Left Click";
+        }
+
+        parts.Add(FormatKeyName(key));
+        return string.Join(" + ", parts);
+    }
+
+    private static bool IsModifierKey(Keys key)
+    {
+        return ToModifierFlag(key) != Keys.None;
+    }
+
+    private static Keys ToModifierFlag(Keys key)
+    {
+        return key switch
+        {
+            Keys.Control or Keys.ControlKey or Keys.LControlKey or Keys.RControlKey => Keys.Control,
+            Keys.Shift or Keys.ShiftKey or Keys.LShiftKey or Keys.RShiftKey => Keys.Shift,
+            Keys.Menu or Keys.Alt or Keys.LMenu or Keys.RMenu => Keys.Alt,
+            _ => Keys.None
+        };
     }
 
     private static string FormatKeyName(Keys key)
@@ -261,15 +315,46 @@ public partial class Form1 : Form
         };
     }
 
-    private static void SendKeyPress(Keys key)
+    private static void SendKeyCombination(IEnumerable<Keys> modifiers, Keys key)
     {
         if (key == Keys.None)
         {
             return;
         }
 
-        keybd_event((byte)key, 0, 0, UIntPtr.Zero);
-        keybd_event((byte)key, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+        var modifierKeys = modifiers.ToList();
+        var inputs = new List<INPUT>();
+
+        foreach (var modifier in modifierKeys)
+        {
+            inputs.Add(CreateKeyInput(modifier, true));
+        }
+
+        inputs.Add(CreateKeyInput(key, true));
+        inputs.Add(CreateKeyInput(key, false));
+
+        for (var i = modifierKeys.Count - 1; i >= 0; i--)
+        {
+            inputs.Add(CreateKeyInput(modifierKeys[i], false));
+        }
+
+        SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf<INPUT>());
+    }
+
+    private static INPUT CreateKeyInput(Keys key, bool isKeyDown)
+    {
+        return new INPUT
+        {
+            Type = 1,
+            Data = new InputUnion
+            {
+                Keyboard = new KEYBDINPUT
+                {
+                    WVk = (ushort)key,
+                    DwFlags = isKeyDown ? 0u : KEYEVENTF_KEYUP
+                }
+            }
+        };
     }
 
     private int ParseInitialDelayMs()
@@ -293,6 +378,30 @@ public partial class Form1 : Form
         lblStatus.Text = text;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct INPUT
+    {
+        public uint Type;
+        public InputUnion Data;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    private struct InputUnion
+    {
+        [FieldOffset(0)]
+        public KEYBDINPUT Keyboard;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KEYBDINPUT
+    {
+        public ushort WVk;
+        public ushort WScan;
+        public uint DwFlags;
+        public uint Time;
+        public IntPtr DwExtraInfo;
+    }
+
     [DllImport("user32.dll")]
     private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
 
@@ -305,8 +414,8 @@ public partial class Form1 : Form
     [DllImport("user32.dll")]
     private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
 
-    [DllImport("user32.dll")]
-    private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc callback, IntPtr hMod, uint dwThreadId);
