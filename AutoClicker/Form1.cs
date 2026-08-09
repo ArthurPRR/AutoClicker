@@ -6,15 +6,21 @@ public partial class Form1 : Form
 {
     private const int ToggleHotkeyId = 1;
     private const int StopHotkeyId = 2;
+    private static IntPtr _keyboardHookHandle = IntPtr.Zero;
+    private static readonly LowLevelKeyboardProc KeyboardHookProc = KeyboardHookCallback;
+    private static Form1? _instance;
     private CancellationTokenSource? _clickLoopCts;
     private int _clicksPerformed;
     private int? _repeatCount;
     private bool _isRunning;
+    private bool _isWaitingForKey;
+    private Keys _recordedKey = Keys.None;
 
     public Form1()
     {
         InitializeComponent();
         InitializeDefaults();
+        _instance = this;
         Load += Form1_Load;
         FormClosed += Form1_FormClosed;
         chkUseTargetPosition.CheckedChanged += chkUseTargetPosition_CheckedChanged;
@@ -99,6 +105,14 @@ public partial class Form1 : Form
         _clickLoopCts?.Cancel();
     }
 
+    private void btnRecordKey_Click(object sender, EventArgs e)
+    {
+        _isWaitingForKey = true;
+        btnRecordKey.Text = "Press a key...";
+        lblRecordedKey.Text = "Current: waiting...";
+        UpdateStatus("Press the key you want to record...");
+    }
+
     private void chkUseTargetPosition_CheckedChanged(object? sender, EventArgs e)
     {
         UpdateTargetControlsState();
@@ -127,6 +141,7 @@ public partial class Form1 : Form
     {
         RegisterHotKey(Handle, ToggleHotkeyId, (uint)KeyModifiers.None, (uint)Keys.F1);
         RegisterHotKey(Handle, StopHotkeyId, (uint)KeyModifiers.None, (uint)Keys.F2);
+        _keyboardHookHandle = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardHookProc, GetModuleHandle(null), 0);
         UpdateStatus("Ready (F1: start/stop, F2: stop)");
     }
 
@@ -134,6 +149,16 @@ public partial class Form1 : Form
     {
         UnregisterHotKey(Handle, ToggleHotkeyId);
         UnregisterHotKey(Handle, StopHotkeyId);
+        if (_keyboardHookHandle != IntPtr.Zero)
+        {
+            UnhookWindowsHookEx(_keyboardHookHandle);
+            _keyboardHookHandle = IntPtr.Zero;
+        }
+
+        if (ReferenceEquals(_instance, this))
+        {
+            _instance = null;
+        }
     }
 
     protected override void WndProc(ref Message m)
@@ -153,6 +178,29 @@ public partial class Form1 : Form
         }
 
         base.WndProc(ref m);
+    }
+
+    private static IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        if (nCode >= 0 && (int)wParam == WM_KEYDOWN)
+        {
+            var keyInfo = Marshal.ReadInt32(lParam);
+            var key = (Keys)keyInfo;
+
+            if (_instance != null && _instance._isWaitingForKey)
+            {
+                _instance.BeginInvoke(new Action(() =>
+                {
+                    _instance._recordedKey = key;
+                    _instance._isWaitingForKey = false;
+                    _instance.btnRecordKey.Text = "Record key";
+                    _instance.lblRecordedKey.Text = $"Current: {FormatKeyName(_instance._recordedKey)}";
+                    _instance.UpdateStatus($"Recorded: {FormatKeyName(_instance._recordedKey)}");
+                }));
+            }
+        }
+
+        return CallNextHookEx(_keyboardHookHandle, nCode, wParam, lParam);
     }
 
     private void btnUseCurrentPosition_Click(object sender, EventArgs e)
@@ -182,8 +230,46 @@ public partial class Form1 : Form
             SetCursorPos(target.X, target.Y);
         }
 
-        mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
-        mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+        var selectedKey = ParseTriggeredKey();
+        if (selectedKey == Keys.None)
+        {
+            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+            return;
+        }
+
+        SendKeyPress(selectedKey);
+    }
+
+    private Keys ParseTriggeredKey()
+    {
+        return _recordedKey;
+    }
+
+    private static string FormatKeyName(Keys key)
+    {
+        return key switch
+        {
+            Keys.None => "Left Click",
+            Keys.Space => "Space",
+            Keys.Enter => "Enter",
+            Keys.Tab => "Tab",
+            Keys.Escape => "Escape",
+            Keys.ShiftKey => "Shift",
+            Keys.ControlKey => "Ctrl",
+            _ => key.ToString()
+        };
+    }
+
+    private static void SendKeyPress(Keys key)
+    {
+        if (key == Keys.None)
+        {
+            return;
+        }
+
+        keybd_event((byte)key, 0, 0, UIntPtr.Zero);
+        keybd_event((byte)key, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
     }
 
     private int ParseInitialDelayMs()
@@ -219,8 +305,28 @@ public partial class Form1 : Form
     [DllImport("user32.dll")]
     private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
 
+    [DllImport("user32.dll")]
+    private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc callback, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GetModuleHandle(string? lpModuleName);
+
     private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
     private const uint MOUSEEVENTF_LEFTUP = 0x0004;
+    private const uint KEYEVENTF_KEYUP = 0x0002;
+    private const int WH_KEYBOARD_LL = 13;
+    private const int WM_KEYDOWN = 0x0100;
+
+    private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     [Flags]
     private enum KeyModifiers : uint

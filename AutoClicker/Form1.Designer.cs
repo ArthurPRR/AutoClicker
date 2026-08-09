@@ -11,6 +11,10 @@ partial class Form1
     private Label lblClickDelay;
     private Label lblRepeat;
     private Label lblTarget;
+    private Label lblTriggerKey;
+    private TextBox txtRecordedKey;
+    private Button btnRecordKey;
+    private Label lblRecordedKey;
     private NumericUpDown nudInitialDelay;
     private NumericUpDown nudClickDelay;
     private NumericUpDown nudRepeat;
@@ -91,6 +95,35 @@ partial class Form1
             AutoSize = true
         };
 
+        lblTriggerKey = new Label
+        {
+            Text = "Key to spam",
+            Location = new Point(20, 160),
+            AutoSize = true
+        };
+
+        txtRecordedKey = new TextBox
+        {
+            Location = new Point(170, 157),
+            Width = 120,
+            Text = ""
+        };
+
+        btnRecordKey = new Button
+        {
+            Text = "Set key",
+            Location = new Point(300, 156),
+            Width = 90
+        };
+        btnRecordKey.Click += btnRecordKey_Click;
+
+        lblRecordedKey = new Label
+        {
+            Text = "Current: Left Click",
+            Location = new Point(20, 190),
+            AutoSize = true
+        };
+
         chkUseTargetPosition = new CheckBox
         {
             Text = "Use these coordinates",
@@ -103,7 +136,7 @@ partial class Form1
             Minimum = -100000,
             Maximum = 100000,
             Value = 0,
-            Location = new Point(170, 155),
+            Location = new Point(170, 185),
             Width = 90
         };
 
@@ -112,14 +145,14 @@ partial class Form1
             Minimum = -100000,
             Maximum = 100000,
             Value = 0,
-            Location = new Point(270, 155),
+            Location = new Point(270, 185),
             Width = 90
         };
 
         btnUseCurrentPosition = new Button
         {
             Text = "Current position",
-            Location = new Point(20, 185),
+            Location = new Point(20, 215),
             Width = 140
         };
         btnUseCurrentPosition.Click += btnUseCurrentPosition_Click;
@@ -127,7 +160,7 @@ partial class Form1
         btnStart = new Button
         {
             Text = "Start",
-            Location = new Point(170, 185),
+            Location = new Point(170, 215),
             Width = 120
         };
         btnStart.Click += btnStart_Click;
@@ -135,7 +168,7 @@ partial class Form1
         btnStop = new Button
         {
             Text = "Stop",
-            Location = new Point(300, 185),
+            Location = new Point(300, 215),
             Width = 90,
             Enabled = false
         };
@@ -144,7 +177,7 @@ partial class Form1
         lblStatus = new Label
         {
             Text = "Ready",
-            Location = new Point(20, 240),
+            Location = new Point(20, 270),
             AutoSize = true
         };
 
@@ -155,6 +188,10 @@ partial class Form1
         Controls.Add(lblRepeat);
         Controls.Add(nudRepeat);
         Controls.Add(lblTarget);
+        Controls.Add(lblTriggerKey);
+        Controls.Add(txtRecordedKey);
+        Controls.Add(btnRecordKey);
+        Controls.Add(lblRecordedKey);
         Controls.Add(chkUseTargetPosition);
         Controls.Add(nudTargetX);
         Controls.Add(nudTargetY);
