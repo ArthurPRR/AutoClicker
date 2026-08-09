@@ -20,6 +20,14 @@ partial class Form1
     private NumericUpDown nudTargetX;
     private NumericUpDown nudTargetY;
     private CheckBox chkUseTargetPosition;
+    private CheckBox chkUseSequence;
+    private ListBox lstSequence;
+    private TextBox txtComboInput;
+    private Label lblComboInput;
+    private Button btnAddSequenceStep;
+    private Button btnAddTypedCombo;
+    private Button btnRemoveSequenceStep;
+    private Button btnClearSequence;
 
     protected override void Dispose(bool disposing)
     {
@@ -36,7 +44,7 @@ partial class Form1
     {
         components = new System.ComponentModel.Container();
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(460, 360);
+        ClientSize = new Size(860, 430);
         Text = "AutoClicker";
 
         var panelTiming = new Panel
@@ -164,6 +172,89 @@ partial class Form1
             BorderStyle = BorderStyle.FixedSingle
         };
 
+        var panelSequence = new Panel
+        {
+            Location = new Point(470, 15),
+            Size = new Size(360, 360),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+
+        var lblSequenceTitle = new Label
+        {
+            Text = "Input sequence",
+            Location = new Point(10, 8),
+            AutoSize = true,
+            Font = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Bold)
+        };
+
+        chkUseSequence = new CheckBox
+        {
+            Text = "Repeat sequence in loop",
+            Location = new Point(12, 32),
+            AutoSize = true
+        };
+        chkUseSequence.CheckedChanged += chkUseSequence_CheckedChanged;
+
+        lblComboInput = new Label
+        {
+            Text = "Combo to add",
+            Location = new Point(12, 58),
+            AutoSize = true
+        };
+
+        txtComboInput = new TextBox
+        {
+            Text = "Ctrl+A",
+            Location = new Point(12, 80),
+            Width = 200
+        };
+
+        btnAddSequenceStep = new Button
+        {
+            Text = "Add current combo",
+            Location = new Point(220, 78),
+            Width = 128
+        };
+        btnAddSequenceStep.Click += btnAddSequenceStep_Click;
+
+        btnAddTypedCombo = new Button
+        {
+            Text = "Add typed combo",
+            Location = new Point(220, 108),
+            Width = 128
+        };
+        btnAddTypedCombo.Click += btnAddTypedCombo_Click;
+
+        btnRemoveSequenceStep = new Button
+        {
+            Text = "Remove selected",
+            Location = new Point(12, 168),
+            Width = 120
+        };
+        btnRemoveSequenceStep.Click += btnRemoveSequenceStep_Click;
+
+        btnClearSequence = new Button
+        {
+            Text = "Clear",
+            Location = new Point(140, 168),
+            Width = 60
+        };
+        btnClearSequence.Click += btnClearSequence_Click;
+
+        lstSequence = new ListBox
+        {
+            Location = new Point(12, 200),
+            Size = new Size(336, 120),
+            IntegralHeight = true
+        };
+
+        var lblSequenceHelp = new Label
+        {
+            Text = "Examples: Ctrl+A, Shift+Enter, Left Click",
+            Location = new Point(12, 330),
+            AutoSize = true
+        };
+
         var lblTriggerTitle = new Label
         {
             Text = "Trigger",
@@ -240,6 +331,16 @@ partial class Form1
         panelTrigger.Controls.Add(btnRecordKey);
         panelTrigger.Controls.Add(lblRecordedKey);
         Controls.Add(panelTrigger);
+
+        panelSequence.Controls.Add(lblSequenceTitle);
+        panelSequence.Controls.Add(chkUseSequence);
+        panelSequence.Controls.Add(lblComboInput);
+        panelSequence.Controls.Add(btnAddSequenceStep);
+        panelSequence.Controls.Add(btnRemoveSequenceStep);
+        panelSequence.Controls.Add(btnClearSequence);
+        panelSequence.Controls.Add(lstSequence);
+        panelSequence.Controls.Add(lblSequenceHelp);
+        Controls.Add(panelSequence);
 
         Controls.Add(btnStart);
         Controls.Add(btnStop);
