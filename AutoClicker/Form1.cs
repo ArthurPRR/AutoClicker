@@ -23,13 +23,21 @@ public partial class Form1 : Form
     private static Form1? _instance;
 
     private CancellationTokenSource? _clickLoopCts;
-
     private int _clicksPerformed;
     private int? _repeatCount;
     private bool _isRunning;
 
     // Enregistrement d'une action
     private bool _isWaitingForInput;
+
+
+    private SequenceStep? _recordedStep;
+
+
+    // État des touches modificatrices
+    private static bool _ctrlDown;
+    private static bool _shiftDown;
+    private static bool _altDown;
 
     private readonly List<SequenceStep> _sequenceItems = new();
     private int _sequenceIndex;
@@ -231,27 +239,50 @@ public partial class Form1 : Form
         StartInputRecording();
     }
 
-    private void StartInputRecording()
+    private async void StartInputRecording()
     {
         if (_isWaitingForInput)
             return;
 
-        _isWaitingForInput = true;
+        _recordedStep = null;
 
-        btnRecordKey.Text = "Press a key or click...";
+        _isWaitingForInput = false;
+
+        btnRecordKey.Text = "Get ready...";
         lblRecordedKey.Text = "Current: waiting...";
 
-        UpdateStatus(
-            "Appuie sur une touche, une combinaison ou clique avec la souris...");
-    }
+        await Task.Delay(150);
 
+        if (IsDisposed)
+            return;
+
+        _isWaitingForInput = true;
+
+        btnRecordKey.Text = "Waiting...";
+        
+        UpdateStatus(
+            "Appuie sur une touche, une combinaison ou clique...");
+    }
     private void StopInputRecording()
     {
         _isWaitingForInput = false;
 
-        btnRecordKey.Text = "Record key";
-    }
+        _ctrlDown = false;
+        _shiftDown = false;
+        _altDown = false;
 
+        btnRecordKey.Text = "Record combo";
+
+        if (_recordedStep != null)
+        {
+            lblRecordedKey.Text =
+                $"Current: {_recordedStep.DisplayName}";
+        }
+        else
+        {
+            lblRecordedKey.Text = "Current: none";
+        }
+    }
     // ============================================================
     // Hook clavier
     // ============================================================
@@ -261,40 +292,114 @@ public partial class Form1 : Form
         IntPtr wParam,
         IntPtr lParam)
     {
-        if (nCode >= 0 &&
-            (int)wParam == WM_KEYDOWN &&
-            _instance != null &&
-            _instance._isWaitingForInput)
+        if (nCode < 0)
         {
-            var keyInfo = Marshal.ReadInt32(lParam);
-            var key = (Keys)keyInfo;
+            return CallNextHookEx(
+                _keyboardHookHandle,
+                nCode,
+                wParam,
+                lParam);
+        }
 
-            // Les touches Ctrl / Shift / Alt sont traitées
-            // avec la touche suivante pour former une combinaison.
-            if (IsModifierKey(key))
-            {
-                return CallNextHookEx(
-                    _keyboardHookHandle,
-                    nCode,
-                    wParam,
-                    lParam);
-            }
+        var message = (int)wParam;
+
+        if (message != WM_KEYDOWN &&
+            message != WM_KEYUP)
+        {
+            return CallNextHookEx(
+                _keyboardHookHandle,
+                nCode,
+                wParam,
+                lParam);
+        }
+
+        var keyInfo = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+
+        var key = (Keys)keyInfo.vkCode;
+
+        bool keyDown = message == WM_KEYDOWN;
+
+        // ------------------------------------------------------------
+        // Mise à jour de l'état des touches modificatrices
+        // ------------------------------------------------------------
+
+        switch (key)
+        {
+            case Keys.LControlKey:
+            case Keys.RControlKey:
+            case Keys.ControlKey:
+                _ctrlDown = keyDown;
+                break;
+
+            case Keys.LShiftKey:
+            case Keys.RShiftKey:
+            case Keys.ShiftKey:
+                _shiftDown = keyDown;
+                break;
+
+            case Keys.LMenu:
+            case Keys.RMenu:
+            case Keys.Menu:
+                _altDown = keyDown;
+                break;
+        }
+
+        // ------------------------------------------------------------
+        // Ne pas enregistrer les touches générées par SendInput()
+        // ------------------------------------------------------------
+
+        const uint LLKHF_INJECTED = 0x00000010;
+
+        if ((keyInfo.flags & LLKHF_INJECTED) != 0)
+        {
+            return CallNextHookEx(
+                _keyboardHookHandle,
+                nCode,
+                wParam,
+                lParam);
+        }
+
+        // ------------------------------------------------------------
+        // Enregistrement
+        // ------------------------------------------------------------
+
+        if (keyDown &&
+            _instance != null &&
+            _instance._isWaitingForInput &&
+            !IsModifierKey(key))
+        {
+            var recordedKey = key;
+
+            var modifiers = new List<Keys>();
+
+            if (_ctrlDown)
+                modifiers.Add(Keys.Control);
+
+            if (_shiftDown)
+                modifiers.Add(Keys.Shift);
+
+            if (_altDown)
+                modifiers.Add(Keys.Alt);
 
             _instance.BeginInvoke(new Action(() =>
             {
-                if (!_instance._isWaitingForInput)
+                if (_instance == null ||
+                    !_instance._isWaitingForInput)
+                {
                     return;
-
-                var modifiers = GetCurrentModifiers();
+                }
 
                 var step = new SequenceStep
                 {
                     Type = SequenceStepType.Keyboard,
-                    Key = key,
+                    Key = recordedKey,
                     Modifiers = modifiers
                 };
 
-                _instance.AddSequenceStep(step);
+                _instance._recordedStep = step;
+
+                _instance.lblRecordedKey.Text =
+                    $"Current: {step.DisplayName}";
 
                 _instance.StopInputRecording();
             }));
@@ -307,21 +412,6 @@ public partial class Form1 : Form
             lParam);
     }
 
-    private static List<Keys> GetCurrentModifiers()
-    {
-        var modifiers = new List<Keys>();
-
-        if ((Control.ModifierKeys & Keys.Control) != 0)
-            modifiers.Add(Keys.Control);
-
-        if ((Control.ModifierKeys & Keys.Shift) != 0)
-            modifiers.Add(Keys.Shift);
-
-        if ((Control.ModifierKeys & Keys.Alt) != 0)
-            modifiers.Add(Keys.Alt);
-
-        return modifiers;
-    }
 
     // ============================================================
     // Hook souris
@@ -332,49 +422,77 @@ public partial class Form1 : Form
         IntPtr wParam,
         IntPtr lParam)
     {
-        if (nCode >= 0 &&
-            _instance != null &&
-            _instance._isWaitingForInput)
+        if (nCode < 0)
         {
-            var message = (int)wParam;
+            return CallNextHookEx(
+                _mouseHookHandle,
+                nCode,
+                wParam,
+                lParam);
+        }
 
-            MouseButton? button = message switch
+        if (_instance == null ||
+            !_instance._isWaitingForInput)
+        {
+            return CallNextHookEx(
+                _mouseHookHandle,
+                nCode,
+                wParam,
+                lParam);
+        }
+
+        var message = (int)wParam;
+
+        MouseButton? button = message switch
+        {
+            WM_LBUTTONDOWN => MouseButton.Left,
+            WM_RBUTTONDOWN => MouseButton.Right,
+            WM_MBUTTONDOWN => MouseButton.Middle,
+            _ => null
+        };
+
+        if (!button.HasValue)
+        {
+            return CallNextHookEx(
+                _mouseHookHandle,
+                nCode,
+                wParam,
+                lParam);
+        }
+
+        var mouseInfo =
+            Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+
+        var position = new Point(
+            mouseInfo.pt.x,
+            mouseInfo.pt.y);
+
+        var capturedButton = button.Value;
+
+        _instance.BeginInvoke(new Action(() =>
+        {
+            if (_instance == null ||
+                !_instance._isWaitingForInput)
             {
-                WM_LBUTTONDOWN => MouseButton.Left,
-                WM_RBUTTONDOWN => MouseButton.Right,
-                WM_MBUTTONDOWN => MouseButton.Middle,
-                _ => null
+                return;
+            }
+
+            var step = new SequenceStep
+            {
+                Type = SequenceStepType.Mouse,
+                MouseButton = capturedButton,
+                MousePosition = position
             };
 
-            if (button.HasValue)
-            {
-                var mouseInfo =
-                    Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+            // On capture seulement.
+            // On n'ajoute PAS automatiquement à la séquence.
+            _instance._recordedStep = step;
 
-                var position = new Point(
-                    mouseInfo.pt.x,
-                    mouseInfo.pt.y);
+            _instance.lblRecordedKey.Text =
+                $"Current: {step.DisplayName}";
 
-                var capturedButton = button.Value;
-
-                _instance.BeginInvoke(new Action(() =>
-                {
-                    if (!_instance._isWaitingForInput)
-                        return;
-
-                    var step = new SequenceStep
-                    {
-                        Type = SequenceStepType.Mouse,
-                        MouseButton = capturedButton,
-                        MousePosition = position
-                    };
-
-                    _instance.AddSequenceStep(step);
-
-                    _instance.StopInputRecording();
-                }));
-            }
-        }
+            _instance.StopInputRecording();
+        }));
 
         return CallNextHookEx(
             _mouseHookHandle,
@@ -398,18 +516,30 @@ public partial class Form1 : Form
         object sender,
         EventArgs e)
     {
+        if (_recordedStep != null)
+        {
+            AddSequenceStep(_recordedStep);
+
+            _recordedStep = null;
+
+            lblRecordedKey.Text = "Current: none";
+
+            return;
+        }
         var text = txtComboInput.Text.Trim();
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            StartInputRecording();
+            UpdateStatus("Aucun combo enregistré.");
             return;
         }
 
         if (TryParseSequenceStep(text, out var step))
         {
             AddSequenceStep(step);
-            txtComboInput.Text = string.Empty;
+
+            txtComboInput.Clear();
+            lblRecordedKey.Text = "Current: none";
         }
         else
         {
@@ -1117,7 +1247,6 @@ public partial class Form1 : Form
             _ => false
         };
     }
-
     private int ParseInitialDelayMs()
     {
         return (int)nudInitialDelay.Value;
@@ -1200,6 +1329,20 @@ public partial class Form1 : Form
         public uint time;
         public IntPtr dwExtraInfo;
     }
+
+#pragma warning disable CS0649
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KBDLLHOOKSTRUCT
+    {
+        public uint vkCode;
+        public uint scanCode;
+        public uint flags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+#pragma warning restore CS0649
 
     // ============================================================
     // Win32
@@ -1301,6 +1444,7 @@ public partial class Form1 : Form
     private const int WH_MOUSE_LL = 14;
 
     private const int WM_KEYDOWN = 0x0100;
+    private const int WM_KEYUP = 0x0101;
 
     private const int WM_LBUTTONDOWN = 0x0201;
     private const int WM_RBUTTONDOWN = 0x0204;
