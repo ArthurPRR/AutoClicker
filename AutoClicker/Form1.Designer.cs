@@ -269,12 +269,13 @@ partial class Form1
             Location = new Point(15, 32),
             AutoSize = true
         };
-
+        
         btnRecordKey = new Button
         {
             Text = "Record combo",
             Location = new Point(100, 28),
-            Width = 110
+            Width = 110,
+            TabStop = false
         };
         btnRecordKey.Click += btnRecordKey_Click;
 

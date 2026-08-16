@@ -93,7 +93,9 @@ public partial class Form1 : Form
     public Form1()
     {
         InitializeComponent();
-
+        
+        AcceptButton = null;
+        
         InitializeDefaults();
 
         _instance = this;
@@ -237,29 +239,25 @@ public partial class Form1 : Form
     private void btnRecordKey_Click(object sender, EventArgs e)
     {
         StartInputRecording();
+        AcceptButton = null;
     }
 
-    private async void StartInputRecording()
+    private void StartInputRecording()
     {
         if (_isWaitingForInput)
             return;
 
         _recordedStep = null;
 
-        _isWaitingForInput = false;
-
-        btnRecordKey.Text = "Get ready...";
-        lblRecordedKey.Text = "Current: waiting...";
-
-        await Task.Delay(150);
-
-        if (IsDisposed)
-            return;
+        _ctrlDown = false;
+        _shiftDown = false;
+        _altDown = false;
 
         _isWaitingForInput = true;
 
         btnRecordKey.Text = "Waiting...";
-        
+        lblRecordedKey.Text = "Current: waiting...";
+
         UpdateStatus(
             "Appuie sur une touche, une combinaison ou clique...");
     }
@@ -287,6 +285,11 @@ public partial class Form1 : Form
     // Hook clavier
     // ============================================================
 
+    private static Keys GetKeyFromHook(KBDLLHOOKSTRUCT keyInfo)
+    {
+        return (Keys)(keyInfo.vkCode & 0xFF);
+    }
+
     private static IntPtr KeyboardHookCallback(
         int nCode,
         IntPtr wParam,
@@ -313,15 +316,13 @@ public partial class Form1 : Form
                 lParam);
         }
 
-        var keyInfo = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+        var keyInfo =
+            Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
 
-        var key = (Keys)keyInfo.vkCode;
+        var key = (Keys)(keyInfo.vkCode & 0xFF);
 
         bool keyDown = message == WM_KEYDOWN;
 
-        // ------------------------------------------------------------
-        // Mise à jour de l'état des touches modificatrices
-        // ------------------------------------------------------------
 
         switch (key)
         {
@@ -344,65 +345,63 @@ public partial class Form1 : Form
                 break;
         }
 
-        // ------------------------------------------------------------
-        // Ne pas enregistrer les touches générées par SendInput()
-        // ------------------------------------------------------------
 
-        const uint LLKHF_INJECTED = 0x00000010;
-
-        if ((keyInfo.flags & LLKHF_INJECTED) != 0)
+        if (_instance != null &&
+            _instance._isWaitingForInput)
         {
-            return CallNextHookEx(
-                _keyboardHookHandle,
-                nCode,
-                wParam,
-                lParam);
-        }
+            const uint LLKHF_INJECTED = 0x00000010;
 
-        // ------------------------------------------------------------
-        // Enregistrement
-        // ------------------------------------------------------------
-
-        if (keyDown &&
-            _instance != null &&
-            _instance._isWaitingForInput &&
-            !IsModifierKey(key))
-        {
-            var recordedKey = key;
-
-            var modifiers = new List<Keys>();
-
-            if (_ctrlDown)
-                modifiers.Add(Keys.Control);
-
-            if (_shiftDown)
-                modifiers.Add(Keys.Shift);
-
-            if (_altDown)
-                modifiers.Add(Keys.Alt);
-
-            _instance.BeginInvoke(new Action(() =>
+            if ((keyInfo.flags & LLKHF_INJECTED) != 0)
             {
-                if (_instance == null ||
-                    !_instance._isWaitingForInput)
+                return CallNextHookEx(
+                    _keyboardHookHandle,
+                    nCode,
+                    wParam,
+                    lParam);
+            }
+
+            if (keyDown && !IsModifierKey(key))
+            {
+                var recordedKey = key;
+
+                var modifiers = new List<Keys>();
+
+                if (_ctrlDown)
+                    modifiers.Add(Keys.Control);
+
+                if (_shiftDown)
+                    modifiers.Add(Keys.Shift);
+
+                if (_altDown)
+                    modifiers.Add(Keys.Alt);
+
+                _instance.BeginInvoke(new Action(() =>
                 {
-                    return;
-                }
+                    if (_instance == null ||
+                        !_instance._isWaitingForInput)
+                    {
+                        return;
+                    }
 
-                var step = new SequenceStep
-                {
-                    Type = SequenceStepType.Keyboard,
-                    Key = recordedKey,
-                    Modifiers = modifiers
-                };
+                    var step = new SequenceStep
+                    {
+                        Type = SequenceStepType.Keyboard,
+                        Key = recordedKey,
+                        Modifiers = modifiers
+                    };
 
-                _instance._recordedStep = step;
+                    _instance._recordedStep = step;
 
-                _instance.lblRecordedKey.Text =
-                    $"Current: {step.DisplayName}";
+                    _instance.lblRecordedKey.Text =
+                        $"Current: {step.DisplayName}";
 
-                _instance.StopInputRecording();
-            }));
+                    _instance.StopInputRecording();
+                }));
+
+                return (IntPtr)1;
+            }
+
+            return (IntPtr)1;
         }
 
         return CallNextHookEx(
@@ -1140,12 +1139,24 @@ public partial class Form1 : Form
 
             if (id == ToggleHotkeyId)
             {
+                if (_isWaitingForInput)
+                {
+                    base.WndProc(ref m);
+                    return;
+                }
+
                 ToggleAutoClicker();
                 return;
             }
 
             if (id == StopHotkeyId)
             {
+                if (_isWaitingForInput)
+                {
+                    base.WndProc(ref m);
+                    return;
+                }
+
                 btnStop_Click(
                     this,
                     EventArgs.Empty);
