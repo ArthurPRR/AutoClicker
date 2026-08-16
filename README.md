@@ -19,6 +19,8 @@ A Windows desktop application for automating mouse clicks and keyboard actions. 
 
 ## Installation
 
+### For development
+
 1. Clone this repository:
    ```bash
    git clone https://github.com/yourusername/AutoClicker.git
@@ -35,7 +37,27 @@ A Windows desktop application for automating mouse clicks and keyboard actions. 
    dotnet run
    ```
 
-Or run the compiled executable from the build output folder.
+### For end users without the command line
+
+To generate a single executable file that can be launched directly by another user, publish the app as a self-contained single-file Windows binary:
+
+```bash
+dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
+```
+
+This creates a standalone `.exe` in a publish folder, typically:
+
+```text
+bin\Release\net10.0-windows\win-x64\publish\
+```
+
+Inside that folder, the user can run:
+
+```text
+AutoClicker.exe
+```
+
+No terminal, SDK installation, or `dotnet` command is required on their machine.
 
 ## Usage
 
@@ -66,12 +88,34 @@ Hotkeys work globally, even when the application window is not in focus.
 
 ```
 AutoClicker/
-├── Form1.cs              # Main UI form with click logic
-├── Form1.Designer.cs     # Form designer generated code
-├── AutoClickerLoopState.cs  # State management for click loops
-├── Program.cs            # Application entry point
-└── AutoClicker.csproj    # Project configuration
+├── Form1.cs                  # Main UI form with click logic
+├── Form1.Designer.cs         # Form designer generated code
+├── AutoClickerLoopState.cs   # State management for click loops
+├── Program.cs                # Application entry point
+├── AutoClicker.csproj        # Project configuration
+├── README.md                 # Project documentation
+└── bin/                     # Build and publish outputs
 ```
+
+## Single-file executable configuration
+
+To make deployment easier, the project can be published as a single file. If needed, add this to the `.csproj` file:
+
+```xml
+<PropertyGroup>
+  <PublishSingleFile>true</PublishSingleFile>
+  <SelfContained>true</SelfContained>
+  <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+</PropertyGroup>
+```
+
+Then run:
+
+```bash
+dotnet publish -c Release -r win-x64
+```
+
+This produces a single executable ready to share with another Windows user.
 
 ## Technologies Used
 
