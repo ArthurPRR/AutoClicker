@@ -519,10 +519,6 @@ public partial class Form1 : Form
         {
             AddSequenceStep(_recordedStep);
 
-            _recordedStep = null;
-
-            lblRecordedKey.Text = "Current: none";
-
             return;
         }
         var text = txtComboInput.Text.Trim();
