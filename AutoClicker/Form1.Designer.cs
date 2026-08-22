@@ -24,10 +24,12 @@ partial class Form1
     private ListBox lstSequence;
     private TextBox txtComboInput;
     private Label lblComboInput;
+    private Label lblSequenceDelay;
     private Button btnAddSequenceStep;
     private Button btnAddTypedCombo;
     private Button btnRemoveSequenceStep;
     private Button btnClearSequence;
+    private NumericUpDown nudSequenceDelay;
 
     protected override void Dispose(bool disposing)
     {
@@ -209,18 +211,34 @@ partial class Form1
             Width = 200
         };
 
+        lblSequenceDelay = new Label
+        {
+            Text = "Delay after step (ms)",
+            Location = new Point(12, 112),
+            AutoSize = true
+        };
+
+        nudSequenceDelay = new NumericUpDown
+        {
+            Minimum = 0,
+            Maximum = 10000,
+            Value = 100,
+            Location = new Point(150, 108),
+            Width = 62
+        };
+
         btnAddSequenceStep = new Button
         {
-            Text = "Add current combo",
-            Location = new Point(220, 78),
-            Width = 128
+            Text = "Add to combo",
+            Location = new Point(15, 52),
+            Width = 110
         };
         btnAddSequenceStep.Click += btnAddSequenceStep_Click;
 
         btnAddTypedCombo = new Button
         {
             Text = "Add typed combo",
-            Location = new Point(220, 108),
+            Location = new Point(220, 78),
             Width = 128
         };
         btnAddTypedCombo.Click += btnAddTypedCombo_Click;
@@ -228,7 +246,7 @@ partial class Form1
         btnRemoveSequenceStep = new Button
         {
             Text = "Remove selected",
-            Location = new Point(12, 168),
+            Location = new Point(12, 198),
             Width = 120
         };
         btnRemoveSequenceStep.Click += btnRemoveSequenceStep_Click;
@@ -236,15 +254,15 @@ partial class Form1
         btnClearSequence = new Button
         {
             Text = "Clear",
-            Location = new Point(140, 168),
+            Location = new Point(140, 198),
             Width = 60
         };
         btnClearSequence.Click += btnClearSequence_Click;
 
         lstSequence = new ListBox
         {
-            Location = new Point(12, 200),
-            Size = new Size(336, 120),
+            Location = new Point(12, 228),
+            Size = new Size(336, 92),
             IntegralHeight = true
         };
 
@@ -331,12 +349,16 @@ partial class Form1
         panelTrigger.Controls.Add(lblTriggerKey);
         panelTrigger.Controls.Add(btnRecordKey);
         panelTrigger.Controls.Add(lblRecordedKey);
+        panelTrigger.Controls.Add(btnAddSequenceStep);
         Controls.Add(panelTrigger);
 
         panelSequence.Controls.Add(lblSequenceTitle);
         panelSequence.Controls.Add(chkUseSequence);
         panelSequence.Controls.Add(lblComboInput);
-        panelSequence.Controls.Add(btnAddSequenceStep);
+        panelSequence.Controls.Add(txtComboInput);
+        panelSequence.Controls.Add(lblSequenceDelay);
+        panelSequence.Controls.Add(nudSequenceDelay);
+        panelSequence.Controls.Add(btnAddTypedCombo);
         panelSequence.Controls.Add(btnRemoveSequenceStep);
         panelSequence.Controls.Add(btnClearSequence);
         panelSequence.Controls.Add(lstSequence);

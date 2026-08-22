@@ -72,16 +72,22 @@ public partial class Form1 : Form
 
         public Point MousePosition { get; init; }
 
+        public int DelayMs { get; init; }
+
         public string DisplayName
         {
             get
             {
+                var delaySuffix = DelayMs > 0
+                    ? $" ({DelayMs} ms)"
+                    : string.Empty;
+
                 if (Type == SequenceStepType.Mouse)
                 {
-                    return $"{MouseButtonToString(MouseButton)} Click ({MousePosition.X}, {MousePosition.Y})";
+                    return $"{MouseButtonToString(MouseButton)} Click ({MousePosition.X}, {MousePosition.Y}){delaySuffix}";
                 }
 
-                return FormatComboName(Modifiers, Key);
+                return $"{FormatComboName(Modifiers, Key)}{delaySuffix}";
             }
         }
     }
@@ -176,24 +182,26 @@ public partial class Form1 : Form
             {
                 _clickLoopCts.Token.ThrowIfCancellationRequested();
 
-                ExecuteNextAction(target);
+                var delayMsForAction = ExecuteNextAction(
+                    target,
+                    clickDelayMs);
 
                 _clicksPerformed++;
 
                 if (!ShouldContinue())
                     break;
 
-                if (clickDelayMs > 0)
+                if (delayMsForAction > 0)
                 {
                     var countText = _repeatCount is null
                         ? "∞"
                         : _repeatCount.Value.ToString();
 
                     UpdateStatus(
-                        $"Action {_clicksPerformed}/{countText} • attente {clickDelayMs} ms");
+                        $"Action {_clicksPerformed}/{countText} • attente {delayMsForAction} ms");
 
                     await Task.Delay(
-                        clickDelayMs,
+                        delayMsForAction,
                         _clickLoopCts.Token);
                 }
             }
@@ -564,13 +572,41 @@ public partial class Form1 : Form
 
     private void AddSequenceStep(SequenceStep step)
     {
-        _sequenceItems.Add(step);
+        var delayedStep = ApplyStepDelay(
+            step,
+            (int)nudSequenceDelay.Value);
 
-        lstSequence.Items.Add(step.DisplayName);
+        _sequenceItems.Add(delayedStep);
+
+        lstSequence.Items.Add(delayedStep.DisplayName);
 
         chkUseSequence.Checked = true;
 
-        UpdateStatus($"Added: {step.DisplayName}");
+        UpdateStatus($"Added: {delayedStep.DisplayName}");
+    }
+
+    private static SequenceStep ApplyStepDelay(
+        SequenceStep step,
+        int delayMs)
+    {
+        if (step.Type == SequenceStepType.Mouse)
+        {
+            return new SequenceStep
+            {
+                Type = SequenceStepType.Mouse,
+                MouseButton = step.MouseButton,
+                MousePosition = step.MousePosition,
+                DelayMs = delayMs
+            };
+        }
+
+        return new SequenceStep
+        {
+            Type = SequenceStepType.Keyboard,
+            Key = step.Key,
+            Modifiers = step.Modifiers.ToList(),
+            DelayMs = delayMs
+        };
     }
 
     private void btnRemoveSequenceStep_Click(
@@ -631,16 +667,24 @@ public partial class Form1 : Form
     // Exécution
     // ============================================================
 
-    private void ExecuteNextAction(Point target)
+    private int ExecuteNextAction(
+        Point target,
+        int defaultDelayMs)
     {
         if (_useSequence && _sequenceItems.Count > 0)
         {
             var step = GetNextSequenceStep();
 
             if (step != null)
+            {
                 ExecuteSequenceStep(step);
 
-            return;
+                return step.DelayMs > 0
+                    ? step.DelayMs
+                    : defaultDelayMs;
+            }
+
+            return defaultDelayMs;
         }
 
         // Pas de séquence : clic gauche classique.
@@ -650,6 +694,8 @@ public partial class Form1 : Form
         }
 
         SendMouseClick(MouseButton.Left);
+
+        return defaultDelayMs;
     }
 
     private void ExecuteSequenceStep(SequenceStep step)
