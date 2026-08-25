@@ -99,7 +99,9 @@ public partial class Form1 : Form
     public Form1()
     {
         InitializeComponent();
-        
+        this.Icon = new Icon(
+            Path.Combine(AppContext.BaseDirectory, "resources", "icon.ico")
+        );
         AcceptButton = null;
         
         InitializeDefaults();
